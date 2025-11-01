@@ -18,14 +18,13 @@ connectDB();
 /* ------------------ 🧩 CORS CONFIGURATION ------------------ */
 // ✅ Allow both local and live frontend
 const allowedOrigins = [
-  "http://localhost:3000", // for local development
-  "https://health-record-tracker-for-rural-clinics.vercel.app", // for production (Vercel)
+  "http://localhost:3000", // Local development
+  "https://health-record-tracker-for-rural-clinics.vercel.app", // Production (Vercel)
 ];
 
 // Manual CORS setup for full control (handles OPTIONS preflight properly)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-
   if (allowedOrigins.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
   }
@@ -40,7 +39,6 @@ app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
-
   next();
 });
 
