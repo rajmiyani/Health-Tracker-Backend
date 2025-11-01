@@ -10,7 +10,7 @@ router.get("/history/pdf/:patientId", verifyToken, medicalHistory.exportMedicalH
 
 router.get("/history/excel/:patientId", verifyToken, medicalHistory.exportMedicalHistoryExcel);
 
-router.get("/history/image/:patientId", verifyToken, medicalHistory.exportMedicalHistoryImage);
+// router.get("/history/image/:patientId", verifyToken, medicalHistory.exportMedicalHistoryImage);
 
 
 module.exports = router;
