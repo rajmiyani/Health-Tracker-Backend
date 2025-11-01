@@ -1,0 +1,370 @@
+const PDFDocument = require("pdfkit");
+const ExcelJS = require("exceljs");
+const mongoose = require("mongoose");
+const { createCanvas } = require("canvas");
+const path = require("path");
+const HealthRecord = require("../../model/DoctorModel/HealthRecord.js");
+const Patient = require("../../model/DoctorModel/Patient.js");
+
+// ✅ Fetch all medical records for a patient
+exports.getMedicalHistory = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    if (!patientId) return res.status(400).json({ message: "Missing patientId parameter." });
+
+    if (!mongoose.Types.ObjectId.isValid(patientId))
+      return res.status(400).json({ message: "Invalid patientId format." });
+
+    const patient = await Patient.findById(patientId).lean();
+    if (!patient) return res.status(404).json({ message: "Patient not found." });
+
+    const records = await HealthRecord.find({ patient: patient._id })
+      .sort({ date: -1 })
+      .populate("patient", "name email")
+      .lean();
+
+    if (!records.length)
+      return res.status(404).json({ message: "No medical records found for this patient." });
+
+    res.status(200).json(records);
+  } catch (err) {
+    console.error("❌ Error fetching records:", err);
+    res.status(500).json({ message: "Error fetching records", error: err.message });
+  }
+};
+
+
+
+// ✅ Export Medical History as PDF
+exports.exportMedicalHistoryPDF = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const patient = await Patient.findById(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
+      });
+    }
+
+    const records = await HealthRecord.find({ patient: patientId }).sort({ date: -1 });
+    if (!records || records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No health records found for this patient.",
+      });
+    }
+
+    const doc = new PDFDocument({ margin: 40, size: "A4" });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=Medical_Report_${patient._id}.pdf`
+    );
+    doc.pipe(res);
+
+    // ==== BACKGROUND ====
+    const gradient = doc.linearGradient(0, 0, 0, doc.page.height);
+    gradient.stop(0, "#f8f9fa").stop(1, "#e9ecef");
+    doc.rect(0, 0, doc.page.width, doc.page.height).fill(gradient);
+
+    // ==== HEADER ====
+    const logoPath = path.join(__dirname, "../public/logo.png");
+    try {
+      doc.image(logoPath, 60, 25, { width: 60, height: 60 });
+    } catch {
+      // ignore if logo not found
+    }
+
+    doc
+      .fillColor("#0B3954")
+      .fontSize(24)
+      .font("Helvetica-Bold")
+      .text("HealthTracker", 140, 30);
+
+    doc
+      .fontSize(14)
+      .font("Helvetica")
+      .fillColor("#007b83")
+      .text("Rural Clinic Management", 140, 60);
+
+    doc.moveDown(3);
+
+    // ==== PATIENT INFO BOX ====
+    doc
+      .rect(40, 110, doc.page.width - 80, 80)
+      .fillOpacity(0.15)
+      .fill("#0B3954")
+      .fillOpacity(1);
+
+    doc
+      .fillColor("#000")
+      .fontSize(12)
+      .font("Helvetica")
+      .text(`Patient ID: ${patient._id}`, 60, 125)
+      .text(`Name: ${patient.name || "-"}`, 60, 145)
+      .text(`Age: ${patient.age || "-"}`, 300, 125)
+      .text(`Gender: ${patient.gender || "-"}`, 300, 145);
+
+    doc.moveDown(3);
+
+    // ==== TABLE HEADER ====
+    const tableTop = 210;
+    const startX = 50;
+    const columnWidths = [90, 130, 130, 100, 100];
+    const headers = ["Date", "Diagnosis", "Treatment", "Vitals", "Provider"];
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(12)
+      .fillColor("#ffffff")
+      .rect(startX - 10, tableTop - 5, 520, 25)
+      .fill("#0B3954");
+
+    headers.forEach((header, i) => {
+      doc
+        .fillColor("#fff")
+        .text(header, startX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0), tableTop, {
+          width: columnWidths[i],
+          align: "left",
+        });
+    });
+
+    // ==== TABLE ROWS ====
+    let y = tableTop + 25;
+    records.forEach((r, index) => {
+      const isEven = index % 2 === 0;
+      doc
+        .rect(startX - 10, y - 3, 520, 25)
+        .fill(isEven ? "#f1f3f5" : "#ffffff");
+
+      doc.fillColor("#000").font("Helvetica").fontSize(11);
+      const data = [
+        new Date(r.date).toDateString(),
+        r.diagnosis || "-",
+        r.treatment || "-",
+        r.vitals || "-",
+        r.provider || "-",
+      ];
+
+      data.forEach((text, i) => {
+        doc.text(
+          text,
+          startX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0),
+          y,
+          {
+            width: columnWidths[i],
+            align: "left",
+          }
+        );
+      });
+
+      y += 25;
+      if (y > doc.page.height - 100) {
+        doc.addPage();
+        y = 100;
+      }
+    });
+
+    // ==== FOOTER ====
+    doc
+      .fontSize(10)
+      .fillColor("#555")
+      .text("Generated by Health Record Tracker System", 0, doc.page.height - 50, {
+        align: "center",
+      });
+
+    doc.end();
+  } catch (error) {
+    console.error("❌ PDF generation error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error generating PDF report",
+      error: error.message,
+    });
+  }
+};
+
+
+
+// ✅ Export Medical History as Excel
+exports.exportMedicalHistoryExcel = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    if (!patientId) return res.status(400).json({ message: "Missing patientId parameter." });
+
+    const records = await HealthRecord.find({ patient: patientId }).sort({ date: -1 }).lean();
+
+    if (!records.length)
+      return res.status(404).json({ message: "No medical records found for this patient." });
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Medical History");
+
+    sheet.columns = [
+      { header: "Date", key: "date", width: 15 },
+      { header: "Diagnosis", key: "diagnosis", width: 25 },
+      { header: "Treatment", key: "treatment", width: 25 },
+      { header: "Vitals", key: "vitals", width: 15 },
+      { header: "Provider", key: "provider", width: 20 },
+      { header: "Type", key: "type", width: 15 },
+    ];
+
+    records.forEach((r) => {
+      sheet.addRow({
+        date: new Date(r.date).toDateString(),
+        diagnosis: r.diagnosis,
+        treatment: r.treatment,
+        vitals: r.vitals || "N/A",
+        provider: r.provider,
+        type: r.type,
+      });
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename=MedicalHistory_${patientId}.xlsx`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    res.status(500).json({ message: "Error exporting Excel", error: err.message });
+  }
+};
+
+
+
+// ✅ Export Medical History as Image
+exports.exportMedicalHistoryImage = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    if (!patientId)
+      return res.status(400).json({ message: "Missing patientId parameter." });
+
+    const patient = await Patient.findById(patientId).lean();
+    if (!patient)
+      return res.status(404).json({ message: "Patient not found." });
+
+    const records = await HealthRecord.find({ patient: patientId })
+      .sort({ date: -1 })
+      .lean();
+
+    if (!records.length)
+      return res
+        .status(404)
+        .json({ message: "No medical records found for this patient." });
+
+    // 🖼️ Create Canvas
+    const width = 1100;
+    const height = Math.min(1800, 300 + records.length * 40);
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+
+    // 🎨 Background gradient
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#F9FAFB");
+    gradient.addColorStop(1, "#E9EEF2");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    // 🧾 Header background bar
+    ctx.fillStyle = "#0B3954";
+    ctx.fillRect(0, 0, width, 120);
+
+    // 🩺 Logo + Title
+    try {
+      const logo = await loadImage(
+        path.join(__dirname, "../../public/assets/logo.png") // change path to your actual logo
+      );
+      ctx.drawImage(logo, 40, 20, 80, 80);
+    } catch {
+      // if logo missing, just skip it
+    }
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 36px Arial";
+    ctx.fillText("HealthTracker", 150, 60);
+    ctx.font = "20px Arial";
+    ctx.fillText("Rural Clinic Management", 150, 90);
+
+    // 📋 Patient info box
+    ctx.fillStyle = "#333";
+    ctx.font = "18px Arial";
+    let infoY = 160;
+    ctx.fillText(`Patient ID: ${patient._id}`, 50, infoY);
+    ctx.fillText(`Name: ${patient.name}`, 50, (infoY += 30));
+    ctx.fillText(`Age: ${patient.age}`, 50, (infoY += 30));
+    ctx.fillText(`Gender: ${patient.gender}`, 50, (infoY += 30));
+
+    // 🧩 Table headers
+    const startY = infoY + 60;
+    const columnWidths = [160, 240, 260, 150, 200];
+    const headers = ["Date", "Diagnosis", "Treatment", "Vitals", "Provider"];
+
+    // Header row background
+    ctx.fillStyle = "#004C91";
+    ctx.fillRect(40, startY - 25, width - 80, 35);
+
+    // Header text
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 18px Arial";
+    let x = 60;
+    headers.forEach((header, i) => {
+      ctx.fillText(header, x, startY);
+      x += columnWidths[i];
+    });
+
+    // 🧾 Table rows
+    let y = startY + 15;
+    ctx.font = "16px Arial";
+
+    records.forEach((r, i) => {
+      const isEven = i % 2 === 0;
+      ctx.fillStyle = isEven ? "#F5F8FA" : "#FFFFFF";
+      ctx.fillRect(40, y - 20, width - 80, 30);
+
+      ctx.fillStyle = "#000";
+      x = 60;
+      const data = [
+        new Date(r.date).toDateString(),
+        r.diagnosis || "-",
+        r.treatment || "-",
+        r.vitals || "-",
+        r.provider || "-",
+      ];
+      data.forEach((text, idx) => {
+        ctx.fillText(text, x, y);
+        x += columnWidths[idx];
+      });
+
+      y += 30;
+    });
+
+    // 🧾 Footer
+    ctx.fillStyle = "#555";
+    ctx.font = "italic 14px Arial";
+    ctx.fillText(
+      "Generated by Health Record Tracker System",
+      width / 2 - 150,
+      height - 30
+    );
+
+    // 📤 Send Image
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=MedicalHistory_${patientId}.png`
+    );
+
+    canvas.createPNGStream().pipe(res);
+  } catch (err) {
+    console.error("❌ Image generation error:", err);
+    res
+      .status(500)
+      .json({ message: "Error exporting Image", error: err.message });
+  }
+};
