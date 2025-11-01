@@ -1,7 +1,7 @@
 const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
 const mongoose = require("mongoose");
-const { createCanvas } = require("canvas");
+// const { createCanvas } = require("canvas");
 const path = require("path");
 const HealthRecord = require("../../model/DoctorModel/HealthRecord.js");
 const Patient = require("../../model/DoctorModel/Patient.js");
@@ -239,132 +239,132 @@ exports.exportMedicalHistoryExcel = async (req, res) => {
 
 
 // ✅ Export Medical History as Image
-exports.exportMedicalHistoryImage = async (req, res) => {
-  try {
-    const { patientId } = req.params;
-    if (!patientId)
-      return res.status(400).json({ message: "Missing patientId parameter." });
+// exports.exportMedicalHistoryImage = async (req, res) => {
+//   try {
+//     const { patientId } = req.params;
+//     if (!patientId)
+//       return res.status(400).json({ message: "Missing patientId parameter." });
 
-    const patient = await Patient.findById(patientId).lean();
-    if (!patient)
-      return res.status(404).json({ message: "Patient not found." });
+//     const patient = await Patient.findById(patientId).lean();
+//     if (!patient)
+//       return res.status(404).json({ message: "Patient not found." });
 
-    const records = await HealthRecord.find({ patient: patientId })
-      .sort({ date: -1 })
-      .lean();
+//     const records = await HealthRecord.find({ patient: patientId })
+//       .sort({ date: -1 })
+//       .lean();
 
-    if (!records.length)
-      return res
-        .status(404)
-        .json({ message: "No medical records found for this patient." });
+//     if (!records.length)
+//       return res
+//         .status(404)
+//         .json({ message: "No medical records found for this patient." });
 
-    // 🖼️ Create Canvas
-    const width = 1100;
-    const height = Math.min(1800, 300 + records.length * 40);
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext("2d");
+//     // 🖼️ Create Canvas
+//     const width = 1100;
+//     const height = Math.min(1800, 300 + records.length * 40);
+//     const canvas = createCanvas(width, height);
+//     const ctx = canvas.getContext("2d");
 
-    // 🎨 Background gradient
-    const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, "#F9FAFB");
-    gradient.addColorStop(1, "#E9EEF2");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
+//     // 🎨 Background gradient
+//     const gradient = ctx.createLinearGradient(0, 0, width, height);
+//     gradient.addColorStop(0, "#F9FAFB");
+//     gradient.addColorStop(1, "#E9EEF2");
+//     ctx.fillStyle = gradient;
+//     ctx.fillRect(0, 0, width, height);
 
-    // 🧾 Header background bar
-    ctx.fillStyle = "#0B3954";
-    ctx.fillRect(0, 0, width, 120);
+//     // 🧾 Header background bar
+//     ctx.fillStyle = "#0B3954";
+//     ctx.fillRect(0, 0, width, 120);
 
-    // 🩺 Logo + Title
-    try {
-      const logo = await loadImage(
-        path.join(__dirname, "../../public/assets/logo.png") // change path to your actual logo
-      );
-      ctx.drawImage(logo, 40, 20, 80, 80);
-    } catch {
-      // if logo missing, just skip it
-    }
+//     // 🩺 Logo + Title
+//     try {
+//       const logo = await loadImage(
+//         path.join(__dirname, "../../public/assets/logo.png") // change path to your actual logo
+//       );
+//       ctx.drawImage(logo, 40, 20, 80, 80);
+//     } catch {
+//       // if logo missing, just skip it
+//     }
 
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 36px Arial";
-    ctx.fillText("HealthTracker", 150, 60);
-    ctx.font = "20px Arial";
-    ctx.fillText("Rural Clinic Management", 150, 90);
+//     ctx.fillStyle = "#ffffff";
+//     ctx.font = "bold 36px Arial";
+//     ctx.fillText("HealthTracker", 150, 60);
+//     ctx.font = "20px Arial";
+//     ctx.fillText("Rural Clinic Management", 150, 90);
 
-    // 📋 Patient info box
-    ctx.fillStyle = "#333";
-    ctx.font = "18px Arial";
-    let infoY = 160;
-    ctx.fillText(`Patient ID: ${patient._id}`, 50, infoY);
-    ctx.fillText(`Name: ${patient.name}`, 50, (infoY += 30));
-    ctx.fillText(`Age: ${patient.age}`, 50, (infoY += 30));
-    ctx.fillText(`Gender: ${patient.gender}`, 50, (infoY += 30));
+//     // 📋 Patient info box
+//     ctx.fillStyle = "#333";
+//     ctx.font = "18px Arial";
+//     let infoY = 160;
+//     ctx.fillText(`Patient ID: ${patient._id}`, 50, infoY);
+//     ctx.fillText(`Name: ${patient.name}`, 50, (infoY += 30));
+//     ctx.fillText(`Age: ${patient.age}`, 50, (infoY += 30));
+//     ctx.fillText(`Gender: ${patient.gender}`, 50, (infoY += 30));
 
-    // 🧩 Table headers
-    const startY = infoY + 60;
-    const columnWidths = [160, 240, 260, 150, 200];
-    const headers = ["Date", "Diagnosis", "Treatment", "Vitals", "Provider"];
+//     // 🧩 Table headers
+//     const startY = infoY + 60;
+//     const columnWidths = [160, 240, 260, 150, 200];
+//     const headers = ["Date", "Diagnosis", "Treatment", "Vitals", "Provider"];
 
-    // Header row background
-    ctx.fillStyle = "#004C91";
-    ctx.fillRect(40, startY - 25, width - 80, 35);
+//     // Header row background
+//     ctx.fillStyle = "#004C91";
+//     ctx.fillRect(40, startY - 25, width - 80, 35);
 
-    // Header text
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 18px Arial";
-    let x = 60;
-    headers.forEach((header, i) => {
-      ctx.fillText(header, x, startY);
-      x += columnWidths[i];
-    });
+//     // Header text
+//     ctx.fillStyle = "#fff";
+//     ctx.font = "bold 18px Arial";
+//     let x = 60;
+//     headers.forEach((header, i) => {
+//       ctx.fillText(header, x, startY);
+//       x += columnWidths[i];
+//     });
 
-    // 🧾 Table rows
-    let y = startY + 15;
-    ctx.font = "16px Arial";
+//     // 🧾 Table rows
+//     let y = startY + 15;
+//     ctx.font = "16px Arial";
 
-    records.forEach((r, i) => {
-      const isEven = i % 2 === 0;
-      ctx.fillStyle = isEven ? "#F5F8FA" : "#FFFFFF";
-      ctx.fillRect(40, y - 20, width - 80, 30);
+//     records.forEach((r, i) => {
+//       const isEven = i % 2 === 0;
+//       ctx.fillStyle = isEven ? "#F5F8FA" : "#FFFFFF";
+//       ctx.fillRect(40, y - 20, width - 80, 30);
 
-      ctx.fillStyle = "#000";
-      x = 60;
-      const data = [
-        new Date(r.date).toDateString(),
-        r.diagnosis || "-",
-        r.treatment || "-",
-        r.vitals || "-",
-        r.provider || "-",
-      ];
-      data.forEach((text, idx) => {
-        ctx.fillText(text, x, y);
-        x += columnWidths[idx];
-      });
+//       ctx.fillStyle = "#000";
+//       x = 60;
+//       const data = [
+//         new Date(r.date).toDateString(),
+//         r.diagnosis || "-",
+//         r.treatment || "-",
+//         r.vitals || "-",
+//         r.provider || "-",
+//       ];
+//       data.forEach((text, idx) => {
+//         ctx.fillText(text, x, y);
+//         x += columnWidths[idx];
+//       });
 
-      y += 30;
-    });
+//       y += 30;
+//     });
 
-    // 🧾 Footer
-    ctx.fillStyle = "#555";
-    ctx.font = "italic 14px Arial";
-    ctx.fillText(
-      "Generated by Health Record Tracker System",
-      width / 2 - 150,
-      height - 30
-    );
+//     // 🧾 Footer
+//     ctx.fillStyle = "#555";
+//     ctx.font = "italic 14px Arial";
+//     ctx.fillText(
+//       "Generated by Health Record Tracker System",
+//       width / 2 - 150,
+//       height - 30
+//     );
 
-    // 📤 Send Image
-    res.setHeader("Content-Type", "image/png");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=MedicalHistory_${patientId}.png`
-    );
+//     // 📤 Send Image
+//     res.setHeader("Content-Type", "image/png");
+//     res.setHeader(
+//       "Content-Disposition",
+//       `attachment; filename=MedicalHistory_${patientId}.png`
+//     );
 
-    canvas.createPNGStream().pipe(res);
-  } catch (err) {
-    console.error("❌ Image generation error:", err);
-    res
-      .status(500)
-      .json({ message: "Error exporting Image", error: err.message });
-  }
-};
+//     canvas.createPNGStream().pipe(res);
+//   } catch (err) {
+//     console.error("❌ Image generation error:", err);
+//     res
+//       .status(500)
+//       .json({ message: "Error exporting Image", error: err.message });
+//   }
+// };
